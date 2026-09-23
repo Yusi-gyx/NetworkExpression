@@ -1,8 +1,21 @@
 import { clampStep, getLesson, lessons } from './lessons.js';
+import { checkpoints, concepts, filterLessons, lessonGroups, loadProgress, recordProgress, saveProgress } from './learning.js';
 
 const app = document.querySelector('#app');
 const initialId = new URLSearchParams(location.search).get('lesson');
-const state = { lessonId: getLesson(initialId).id, stepIndex: 0, playing: false, timer: null };
+let storage = null;
+try { storage = window.localStorage; } catch { /* Storage may be unavailable. */ }
+const state = {
+  lessonId: getLesson(initialId).id,
+  stepIndex: 0,
+  playing: false,
+  timer: null,
+  search: '',
+  group: '全部',
+  answers: {},
+  visited: { [getLesson(initialId).id]: new Set([0]) },
+  progress: loadProgress(storage, lessons.map((lesson) => lesson.id)),
+};
 
 const iconPaths = {
   layers: '<rect x="4" y="5" width="16" height="4" rx="1"/><rect x="4" y="10" width="16" height="4" rx="1"/><rect x="4" y="15" width="16" height="4" rx="1"/>',
@@ -18,6 +31,11 @@ const iconPaths = {
   spark: '<path d="m12 2 1.9 6.1L20 10l-6.1 1.9L12 18l-1.9-6.1L4 10l6.1-1.9L12 2ZM19 17l.7 2.3L22 20l-2.3.7L19 23l-.7-2.3L16 20l2.3-.7L19 17Z"/>',
   info: '<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/>',
   check: '<path d="m5 12 4 4L19 6"/>',
+  search: '<circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/>',
+  radar: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/><path d="M12 12 18.5 5.5"/>',
+  address: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 9h5M7 13h10M16 9h1"/>',
+  route: '<circle cx="5" cy="18" r="2"/><circle cx="12" cy="6" r="2"/><circle cx="19" cy="18" r="2"/><path d="m6 16 5-8m2 0 5 8"/>',
+  pulse: '<path d="M2 12h4l2-5 4 10 3-7 2 2h5"/>',
 };
 
 function icon(name, className = '') {
@@ -30,11 +48,41 @@ function escapeHtml(value) {
 
 function renderLessonCard(lesson) {
   const active = lesson.id === state.lessonId;
+  const mastered = state.progress.mastered.includes(lesson.id);
+  const completed = state.progress.completed.includes(lesson.id);
   return `<button class="lesson-card ${active ? 'is-active' : ''}" type="button" data-action="lesson" data-id="${lesson.id}" aria-pressed="${active}">
     <span class="lesson-card-icon">${icon(lesson.icon)}</span>
     <span class="lesson-card-copy"><span class="lesson-card-category">${lesson.category} <span class="lesson-card-number">${lesson.number}</span></span><strong>${lesson.shortTitle}</strong><small>${lesson.subtitle}</small></span>
-    <span class="lesson-card-chevron">${icon('right')}</span>
+    <span class="lesson-card-chevron ${mastered ? 'is-mastered' : ''}">${mastered ? icon('check') : completed ? '●' : icon('right')}<span class="sr-only">${mastered ? '自测通过' : completed ? '演示已完成' : '未完成'}</span></span>
   </button>`;
+}
+
+function renderLessonList() {
+  const matching = filterLessons(lessons, state.search, state.group);
+  return matching.length ? matching.map(renderLessonCard).join('') : '<p class="catalog-empty">没有找到相关场景。试试其他关键词或分类。</p>';
+}
+
+function renderCatalogTools() {
+  return `<div class="catalog-tools"><label class="catalog-search" for="lesson-search">${icon('search')}<input id="lesson-search" type="search" placeholder="搜索协议、概念…" autocomplete="off" value="${escapeHtml(state.search)}" aria-label="搜索学习场景"></label>
+    <label class="catalog-select-label" for="lesson-group">按层级筛选</label><select id="lesson-group" aria-label="按层级筛选场景">${lessonGroups.map((group) => `<option value="${group}" ${state.group === group ? 'selected' : ''}>${group === '全部' ? '全部主题' : group}</option>`).join('')}</select></div>`;
+}
+
+function renderCheckpoint(lesson, unlocked) {
+  const checkpoint = checkpoints[lesson.id];
+  if (!unlocked) return `<section class="checkpoint checkpoint-locked" aria-label="知识自测"><div class="checkpoint-heading"><span>QUICK CHECK / 知识自测</span><small>浏览全部步骤后开放</small></div><p>看过本场景的每一步后，用一道题检验是否理解了关键概念。</p></section>`;
+  const selected = state.answers[lesson.id];
+  const attempted = Number.isInteger(selected);
+  const mastered = state.progress.mastered.includes(lesson.id);
+  const optionButtons = checkpoint.options.map((option, index) => {
+    const status = attempted || mastered ? index === checkpoint.answer ? 'is-correct' : selected === index ? 'is-wrong' : '' : '';
+    return `<button type="button" class="quiz-option ${status}" data-action="answer" data-option="${index}" ${mastered ? 'disabled' : ''} aria-pressed="${selected === index}"><span>${String.fromCharCode(65 + index)}</span>${escapeHtml(option)}</button>`;
+  }).join('');
+  const feedback = attempted || mastered ? `<div class="quiz-feedback ${mastered ? 'is-success' : 'is-error'}" tabindex="-1" data-quiz-feedback role="status"><strong>${mastered ? '回答正确，已掌握！' : '再想一想，可以继续选择。'}</strong><span>${escapeHtml(checkpoint.explanation)}</span></div>` : '';
+  return `<section class="checkpoint" aria-labelledby="quiz-title"><div class="checkpoint-heading"><span>QUICK CHECK / 知识自测</span><small>${mastered ? '已通过' : '选择一个答案'}</small></div><h4 id="quiz-title">${escapeHtml(checkpoint.question)}</h4><div class="quiz-options" role="group" aria-label="自测选项">${optionButtons}</div>${feedback}</section>`;
+}
+
+function renderConcepts() {
+  return concepts.map((concept) => `<article class="concept-card"><span class="concept-group">${escapeHtml(concept.group)}</span><h3>${escapeHtml(concept.term)}</h3><p>${escapeHtml(concept.definition)}</p><button type="button" data-action="related" data-id="${concept.related}">查看相关演示 ${icon('arrow')}</button></article>`).join('');
 }
 
 function renderStage(lesson, step) {
@@ -87,7 +135,7 @@ function render() {
   app.innerHTML = `<div class="site-shell">
     <header class="site-header"><div class="container header-inner">
       <a class="brand" href="#top" aria-label="NetworkExpression 首页"><span class="brand-mark"><span></span><span></span><span></span></span><span>network<span class="brand-light">expression</span><small>网络原理可视化实验室</small></span></a>
-      <nav class="header-nav" aria-label="主导航"><a href="#learning">交互实验</a><a href="#about">关于项目</a></nav>
+      <nav class="header-nav" aria-label="主导航"><a href="#learning">交互实验</a><a href="#concepts">概念速查</a><a href="#about">关于项目</a></nav>
       <a class="header-cta" href="#learning">开始探索 ${icon('arrow')}</a>
     </div></header>
 
@@ -96,7 +144,7 @@ function render() {
         <div class="eyebrow"><span class="eyebrow-line"></span> LEARN BY SEEING <span class="eyebrow-dot">·</span> 计算机网络原理</div>
         <h1 id="hero-title">把网络过程，<br><span>看得见。</span></h1>
         <p>从一条请求到一次连接，把抽象协议拆解成看得懂的每一步。跟随数据流动，真正理解网络如何工作。</p>
-        <div class="hero-actions"><a class="primary-link" href="#learning">进入交互实验 ${icon('arrow')}</a><span class="hero-meta"><span class="meta-dot"></span> 4 个入门场景 · 自由控制节奏</span></div>
+        <div class="hero-actions"><a class="primary-link" href="#learning">进入交互实验 ${icon('arrow')}</a><span class="hero-meta"><span class="meta-dot"></span> ${lessons.length} 个入门场景 · 自由控制节奏</span></div>
       </div><div class="hero-art" aria-hidden="true"><div class="art-grid"></div><span class="art-cross art-cross-a">+</span><span class="art-cross art-cross-b">+</span>
         <div class="art-orbit orbit-one"></div><div class="art-orbit orbit-two"></div>
         <div class="art-node art-node-a"><span class="art-node-icon">01</span><span>CLIENT<small>发起请求</small></span></div>
@@ -107,8 +155,8 @@ function render() {
       </div></section>
 
       <section id="learning" class="learning-section"><div class="container">
-        <div class="section-heading"><div><span class="section-kicker">01 / INTERACTIVE LAB</span><h2>从这里，开始理解网络<span class="heading-period">.</span></h2><p>选择一个主题，亲手推进协议的每一步。</p></div><span class="section-count">EXPLORE THE NETWORK <span>↗</span></span></div>
-        <div id="experience" class="experience-layout"><aside class="lesson-sidebar" aria-label="课程目录"><div class="sidebar-heading"><span>学习路径</span><span>01 — 04</span></div><div class="lesson-list">${lessons.map(renderLessonCard).join('')}</div><div class="sidebar-footer"><span class="sidebar-footer-icon">${icon('spark')}</span><p>跟着数据走一遍，<br>比背下定义更容易理解。</p></div></aside>
+        <div class="section-heading"><div><span class="section-kicker">01 / INTERACTIVE LAB</span><h2>从这里，开始理解网络<span class="heading-period">.</span></h2><p>选择一个主题，亲手推进协议的每一步。</p></div><span class="learning-summary">已完成 ${state.progress.completed.length} / ${lessons.length} 个场景<br>自测通过 ${state.progress.mastered.length} / ${lessons.length} 题</span></div>
+        <div id="experience" class="experience-layout"><aside class="lesson-sidebar" aria-label="课程目录"><div class="sidebar-heading"><span>学习路径</span><span id="catalog-count">${filterLessons(lessons, state.search, state.group).length} / ${String(lessons.length).padStart(2, '0')}</span></div>${renderCatalogTools()}<div class="lesson-list">${renderLessonList()}</div><div class="sidebar-footer"><span class="sidebar-footer-icon">${icon('spark')}</span><p>跟着数据走一遍，<br>比背下定义更容易理解。</p></div></aside>
           <div class="lesson-workspace"><div class="lesson-overview"><div><div class="lesson-overline"><span class="lesson-overline-dot"></span> ${lesson.category} <span class="overview-slash">/</span> 场景 ${lesson.number}</div><h3>${lesson.title}</h3><p>${lesson.summary}</p></div><span class="duration">◷ &nbsp;${lesson.duration}</span></div>
             <div class="simulation-grid">${renderStage(lesson, step)}
               <div class="explain-panel"><div class="explain-label"><span class="explain-label-icon">${icon('info')}</span> STEP INSIGHT <span>${String(state.stepIndex + 1).padStart(2, '0')} / ${String(lesson.steps.length).padStart(2, '0')}</span></div>
@@ -119,9 +167,11 @@ function render() {
               <div class="control-main"><button class="control-button" type="button" data-action="prev" ${atStart ? 'disabled' : ''}>${icon('left')} 上一步</button><button class="control-button control-play" type="button" data-action="play">${icon(state.playing ? 'pause' : 'play')} ${state.playing ? '暂停演示' : '自动演示'}</button><button class="control-button control-next" type="button" data-action="next" ${atEnd ? 'disabled' : ''}>下一步 ${icon('right')}</button></div>
             </div></div>
             <div class="principle-strip"><div><span class="principle-icon">${icon('layers')}</span><span><small>核心原理</small><strong>${escapeHtml(lesson.principle)}</strong></span></div><details><summary>演示假设与简化</summary><p>${escapeHtml(lesson.assumption)}</p></details></div>
+            ${renderCheckpoint(lesson, state.progress.completed.includes(lesson.id))}
           </div></div>
       </div></section>
-      <section id="about" class="about-section"><div class="container about-inner"><div><span class="section-kicker">BUILT FOR CURIOSITY</span><h2>学网络，先看见过程。</h2><p>NetworkExpression 是一间不断扩展的网络原理实验室。每个场景都从一个具体问题出发，让你按自己的节奏观察、推演、再回看。</p></div><div class="about-stat"><strong>04</strong><span>个交互场景<br>持续探索中</span></div></div></section>
+      <section id="concepts" class="concepts-section"><div class="container"><div class="section-heading"><div><span class="section-kicker">02 / CONCEPT ATLAS</span><h2>概念速查<span class="heading-period">.</span></h2><p>把常见名词放回具体网络过程里理解。</p></div><span class="concept-count">${String(concepts.length).padStart(2, '0')} TERMS</span></div><div class="concept-grid">${renderConcepts()}</div></div></section>
+      <section id="about" class="about-section"><div class="container about-inner"><div><span class="section-kicker">BUILT FOR CURIOSITY</span><h2>学网络，先看见过程。</h2><p>NetworkExpression 是一间不断扩展的网络原理实验室。每个场景都从一个具体问题出发，让你按自己的节奏观察、推演、再回看。</p></div><div class="about-stat"><strong>${String(lessons.length).padStart(2, '0')}</strong><span>个交互场景<br>持续探索中</span></div></div></section>
     </main><footer class="site-footer"><div class="container footer-inner"><span>© 2026 NetworkExpression</span><span>让复杂的网络，变得可以理解。</span></div></footer>
   </div>`;
 }
@@ -132,9 +182,28 @@ function stopPlayback() {
   state.playing = false;
 }
 
+function updateCatalog() {
+  const matching = filterLessons(lessons, state.search, state.group);
+  const list = app.querySelector('.lesson-list');
+  const count = app.querySelector('#catalog-count');
+  if (list) list.innerHTML = renderLessonList();
+  if (count) count.textContent = `${matching.length} / ${String(lessons.length).padStart(2, '0')}`;
+}
+
+function recordCompletion() {
+  const lesson = getLesson(state.lessonId);
+  const visited = state.visited[lesson.id] ?? new Set([0]);
+  visited.add(state.stepIndex);
+  state.visited[lesson.id] = visited;
+  if (visited.size < lesson.steps.length) return;
+  state.progress = recordProgress(state.progress, lesson.id, 'completed');
+  saveProgress(storage, state.progress);
+}
+
 function setStep(index) {
   stopPlayback();
   state.stepIndex = clampStep(getLesson(state.lessonId), index);
+  recordCompletion();
   render();
 }
 
@@ -142,9 +211,11 @@ function selectLesson(id, updateHistory = true) {
   stopPlayback();
   state.lessonId = getLesson(id).id;
   state.stepIndex = 0;
+  state.visited[state.lessonId] ??= new Set([0]);
   if (updateHistory) {
     const url = new URL(location.href);
     url.searchParams.set('lesson', state.lessonId);
+    url.hash = 'learning';
     history.pushState(null, '', url);
   }
   render();
@@ -157,21 +228,19 @@ function togglePlayback() {
     return;
   }
   const lesson = getLesson(state.lessonId);
-  if (state.stepIndex === lesson.steps.length - 1) state.stepIndex = 0;
+  if (state.stepIndex === lesson.steps.length - 1) {
+    state.stepIndex = 0;
+    recordCompletion();
+  }
   state.playing = true;
   render();
   state.timer = setInterval(() => {
-    if (state.stepIndex >= lesson.steps.length - 1) {
-      stopPlayback();
-      render();
-      return;
-    }
     state.stepIndex += 1;
-    render();
+    recordCompletion();
     if (state.stepIndex === lesson.steps.length - 1) {
       stopPlayback();
-      render();
     }
+    render();
   }, 2600);
 }
 
@@ -179,18 +248,42 @@ app.addEventListener('click', (event) => {
   const control = event.target.closest('[data-action]');
   if (!control) return;
   const { action } = control.dataset;
-  const focusSelector = action === 'lesson' ? `[data-action="lesson"][data-id="${control.dataset.id}"]` : action === 'step' ? `[data-action="step"][data-step="${control.dataset.step}"]` : `[data-action="${action}"]`;
+  const focusSelector = action === 'lesson' || action === 'related' ? `[data-action="lesson"][data-id="${control.dataset.id}"]` : action === 'step' ? `[data-action="step"][data-step="${control.dataset.step}"]` : action === 'answer' ? `[data-action="answer"][data-option="${control.dataset.option}"]` : `[data-action="${action}"]`;
 
   if (action === 'lesson') selectLesson(control.dataset.id);
+  if (action === 'related') selectLesson(control.dataset.id);
   if (action === 'step') setStep(Number(control.dataset.step));
   if (action === 'prev') setStep(state.stepIndex - 1);
   if (action === 'next') setStep(state.stepIndex + 1);
   if (action === 'reset') setStep(0);
   if (action === 'play') togglePlayback();
+  if (action === 'answer') {
+    const lesson = getLesson(state.lessonId);
+    const chosen = Number(control.dataset.option);
+    state.answers[lesson.id] = chosen;
+    if (chosen === checkpoints[lesson.id].answer) {
+      state.progress = recordProgress(state.progress, lesson.id, 'mastered');
+      saveProgress(storage, state.progress);
+    }
+    render();
+  }
 
   const replacement = app.querySelector(focusSelector);
   if (replacement && !replacement.disabled) replacement.focus({ preventScroll: true });
-  else app.querySelector('#step-title')?.focus({ preventScroll: true });
+  else (app.querySelector('[data-quiz-feedback]') ?? app.querySelector('#step-title'))?.focus({ preventScroll: true });
+  if (action === 'related') app.querySelector('#learning')?.scrollIntoView({ behavior: 'smooth' });
+});
+
+app.addEventListener('input', (event) => {
+  if (event.target.id !== 'lesson-search') return;
+  state.search = event.target.value;
+  updateCatalog();
+});
+
+app.addEventListener('change', (event) => {
+  if (event.target.id !== 'lesson-group') return;
+  state.group = event.target.value;
+  updateCatalog();
 });
 
 window.addEventListener('popstate', () => selectLesson(new URLSearchParams(location.search).get('lesson'), false));

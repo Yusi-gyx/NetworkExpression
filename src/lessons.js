@@ -1,3 +1,5 @@
+import { extendedLessons } from './lessons-extended.js';
+
 /**
  * A lesson is a small, linear storyboard. Each step describes one visible
  * change: participants, the message (if any), and the packet's current form.
@@ -7,6 +9,7 @@ export const lessons = [
   {
     id: 'encapsulation',
     number: '01',
+    group: '基础',
     category: '网络基础',
     title: '数据如何封装？',
     shortTitle: '分层封装',
@@ -78,6 +81,7 @@ export const lessons = [
   {
     id: 'dns',
     number: '02',
+    group: '应用层',
     category: '应用层协议',
     title: '域名如何找到 IP？',
     shortTitle: 'DNS 查询',
@@ -108,6 +112,7 @@ export const lessons = [
   {
     id: 'tcp',
     number: '03',
+    group: '传输层',
     category: '传输层协议',
     title: 'TCP 为什么握三次手？',
     shortTitle: 'TCP 三次握手',
@@ -132,6 +137,7 @@ export const lessons = [
   {
     id: 'http',
     number: '04',
+    group: '应用层',
     category: '应用层协议',
     title: '网页请求如何往返？',
     shortTitle: 'HTTP 往返',
@@ -153,6 +159,7 @@ export const lessons = [
       { title: '浏览器解析页面', eyebrow: '终点 · 客户端', description: '浏览器解析收到的 HTML 并开始呈现页面；实际页面通常还会请求 CSS、脚本和图片。', insight: '一次 HTTP 往返不等于完整页面加载。', state: '页面开始呈现', from: 'browser', to: null, message: 'HTML → 页面', segments: [{ label: '页面内容', type: 'signal' }] },
     ],
   },
+  ...extendedLessons,
 ];
 
 export function getLesson(id) {
