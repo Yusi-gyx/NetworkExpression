@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { lessons } from '../src/lessons.js';
-import { checkpoints, progressKey } from '../src/learning.js';
+import { checkpoints, progressKey, filterLessons } from '../src/learning.js';
 
 test('player renders each scenario and records a correct checkpoint answer', async () => {
   const listeners = {};
@@ -56,7 +56,7 @@ test('player renders each scenario and records a correct checkpoint answer', asy
   listeners.input({ target: { id: 'lesson-search', value: 'MAC' } });
   assert.ok(lessonList.innerHTML.includes('ARP 地址解析'));
   assert.ok(!lessonList.innerHTML.includes('DNS 查询'));
-  assert.equal(catalogCount.textContent, '1 / 08');
+  assert.equal(catalogCount.textContent, `${filterLessons(lessons, 'MAC').length} / ${lessons.length}`);
   listeners.change({ target: { id: 'lesson-group', value: '网络层' } });
-  assert.equal(catalogCount.textContent, '0 / 08');
+  assert.equal(catalogCount.textContent, `${filterLessons(lessons, 'MAC', '网络层').length} / ${lessons.length}`);
 });

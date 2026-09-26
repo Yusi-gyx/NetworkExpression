@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { clampStep, getLesson, lessons } from '../src/lessons.js';
 
 test('every lesson has a complete, connected storyboard', () => {
-  assert.equal(lessons.length, 8);
+  assert.equal(lessons.length, 29);
   assert.equal(new Set(lessons.map((lesson) => lesson.id)).size, lessons.length);
   assert.equal(new Set(lessons.map((lesson) => lesson.number)).size, lessons.length);
 

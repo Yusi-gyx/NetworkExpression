@@ -1,4 +1,8 @@
+import { glossary } from './glossary.js';
+import { curriculumLessons } from './curriculum.js';
+
 export const checkpoints = {
+  ...Object.fromEntries(curriculumLessons.map(lesson => [lesson.id, lesson.quiz])),
   encapsulation: {
     question: 'IP 数据报经过路由器转发后，哪部分通常需要为新链路重新生成？',
     options: ['最终目的 IP 地址', '链路层帧封装', 'HTTP 请求方法'],
@@ -50,6 +54,7 @@ export const checkpoints = {
 };
 
 export const concepts = [
+  ...glossary,
   { term: 'IP 地址', group: '网络层', definition: '用于在 IP 网络中标识接口并参与路由寻址；数据报用目的 IP 指向最终目标。', related: 'routing' },
   { term: 'MAC 地址', group: '链路层', definition: '以太网等链路中使用的硬件地址。发送一帧时，目的 MAC 指向当前链路上的下一跳。', related: 'arp' },
   { term: '默认网关', group: '网络层', definition: '主机找不到更具体路由时使用的下一跳，通常是一台连接其他网络的路由器。', related: 'routing' },
@@ -62,14 +67,14 @@ export const concepts = [
   { term: 'ACK', group: '传输层', definition: 'TCP 确认标志及确认机制的一部分。确认号表示接收方下一步期望收到的序号。', related: 'tcp' },
 ];
 
-export const lessonGroups = ['全部', '基础', '链路层', '网络层', '传输层', '应用层'];
+export const lessonGroups = ['全部', '基础', '物理层', '链路层', '网络层', '传输层', '应用层'];
 
 export function filterLessons(lessons, query = '', group = '全部') {
   const normalized = query.trim().toLocaleLowerCase();
   return lessons.filter((lesson) => {
     if (group !== '全部' && lesson.group !== group) return false;
     if (!normalized) return true;
-    return [lesson.title, lesson.shortTitle, lesson.subtitle, lesson.summary, lesson.category, lesson.group]
+    return [lesson.title, lesson.shortTitle, lesson.subtitle, lesson.summary, lesson.category, lesson.group, ...lesson.terms]
       .some((value) => value.toLocaleLowerCase().includes(normalized));
   });
 }

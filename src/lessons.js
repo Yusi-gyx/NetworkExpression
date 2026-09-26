@@ -1,4 +1,6 @@
 import { extendedLessons } from './lessons-extended.js';
+import { curriculumLessons } from './curriculum.js';
+import { enrichLesson } from './topology.js';
 
 /**
  * A lesson is a small, linear storyboard. Each step describes one visible
@@ -160,7 +162,8 @@ export const lessons = [
     ],
   },
   ...extendedLessons,
-];
+  ...curriculumLessons,
+].map(enrichLesson);
 
 export function getLesson(id) {
   return lessons.find((lesson) => lesson.id === id) ?? lessons[0];

@@ -16,7 +16,7 @@ const mime = {
 createServer(async (request, response) => {
   try {
     const pathname = decodeURIComponent(new URL(request.url, 'http://localhost').pathname);
-    if (!['/', '/index.html', '/src/main.js', '/src/lessons.js', '/src/lessons-extended.js', '/src/learning.js', '/src/styles.css'].includes(pathname)) {
+    if (!['/', '/index.html', '/src/main.js', '/src/lessons.js', '/src/lessons-extended.js', '/src/learning.js', '/src/styles.css', '/src/curriculum.js', '/src/topology.js', '/src/visuals.js', '/src/glossary.js', '/src/experiments.js'].includes(pathname)) {
       response.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' }).end('Not found');
       return;
     }

@@ -18,7 +18,7 @@ test('every scenario has a valid question and concepts link to real scenarios', 
 
 test('catalog search and layer filter can be combined', () => {
   assert.equal(filterLessons(lessons, 'MAC').some((lesson) => lesson.id === 'arp'), true);
-  assert.deepEqual(filterLessons(lessons, 'TTL', '网络层').map((lesson) => lesson.id), ['routing']);
+  assert.deepEqual(filterLessons(lessons, 'TTL', '网络层').map((lesson) => lesson.id), ['routing', 'traceroute']);
   assert.equal(filterLessons(lessons, '没有这个协议').length, 0);
   for (const lesson of lessons) assert.ok(lessonGroups.includes(lesson.group));
 });
